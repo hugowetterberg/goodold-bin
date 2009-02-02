@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+defined()
+{
+  echo "${!1-one}" == "${!1-two}"
+}
+
+# Read configuration
+. ./sync.config
+
+# File to dump to
+DUMP_NAME=dump.`date +%Y%m%d_%H.%M.%S`.sql
+PRINT="echo "
+STICKY_PRINT="growlnotify -s -aTextMate -m"
+
+ARCHIVE_DIR=database_archive
+if [ ! -d $ARCHIVE_DIR ]; then
+  mkdir $ARCHIVE_DIR
+fi
+
+SYNC_DB="${1-n}"
+SYNC_FILES="${2-n}"
+
+if [ "$SYNC_DB" == "y" ]; then
+  # Get remote data
+  $PRINT "Dumping data from remote db to $DUMP_NAME"
+  mysqldump5 --opt -v -h $REMOTE_HOST -P $REMOTE_PORT -u $REMOTE_USER -p"$REMOTE_PASS" $REMOTE_DB > $DUMP_NAME
+  
+  # Update local testing server
+  $PRINT "Emptying local database"
+  mysqldump5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  
+  $PRINT "Updating local testing server"
+  if [ `defined SED_REPLACEMENTS` ]; then
+    sed -f $SED_REPLACEMENTS $DUMP_NAME | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  else
+    mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB < $DUMP_NAME
+  fi
+  
+  # Archiving backup
+  $PRINT "Archiving dump"
+  mv $DUMP_NAME $ARCHIVE_DIR/$DUMP_NAME
+  gzip $ARCHIVE_DIR/$DUMP_NAME
+  ln -f $ARCHIVE_DIR/$DUMP_NAME.gz $ARCHIVE_DIR/last_dump.sql.gz
+fi
+
+if [ "$SYNC_DB" == "r" ]; then
+  if [ -f $ARCHIVE_DIR/last_dump.sql.gz ]; then
+    $PRINT "Refreshing local database from last dump"
+    
+    # Update local testing server
+    $PRINT "Emptying local database"
+    mysqldump5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  
+    $PRINT "Updating local testing server"
+    if [ `defined SED_REPLACEMENTS` ]; then
+      gunzip -c $ARCHIVE_DIR/last_dump.sql.gz | sed -f $SED_REPLACEMENTS | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+    else
+      gunzip -c $ARCHIVE_DIR/last_dump.sql.gz | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+    fi
+  else
+    $PRINT "No previous dump found"
+  fi
+fi
+
+if [ "$SYNC_FILES" == "y" ]; then
+  $PRINT "Rsyncing files"
+  sudo rsync -ave ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST:$REMOTE_FILES $LOCAL_FILES
+  $PRINT "Changing ownership of rsynced files"
+  sudo chown -R $HTTPD_USER:$HTTPD_USER $LOCAL_FILES
+fi
+
+$PRINT "Done."
+$STICKY_PRINT "Done updating local server"
