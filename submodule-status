@@ -1,0 +1,92 @@
+#!/usr/bin/env php
+<?php
+if (!file_exists('.gitmodules')) {
+  print "No submodules found. This command must be run from the root of the git working direcory\n";
+  exit(1);
+}
+
+$arguments = array();
+for ($i = 1; $i<$argc; $i++) {
+  $arg = $argv[$i];
+  if (strpos($arg, '=') === FALSE) {
+    $key = $arg;
+    $val = TRUE;
+  }
+  else {
+    list($key, $val) = preg_split('/\=/', $arg);
+  }
+  $arguments[$key] = $val;
+}
+
+$mod = fopen('.gitmodules', 'r');
+if (!$mod) {
+  print "Could not read the .gitmodules file\n";
+  exit(1);
+}
+
+$root = getcwd();
+
+$total_changes = 0;
+$total_ahead = 0;
+$total_behind = 0;
+
+while (!feof($mod)) {
+  $line = fgets($mod);
+  $matches = array();
+  if (preg_match('/path\s?=\s?(.+)/', $line, $matches)) {
+    chdir($matches[1]);
+
+    if (is_string($arguments['fetch'])) {
+      exec('git fetch ' . $arguments['fetch'], $devnull=array());
+    }
+
+    $path = $matches[1];
+    $output = array();
+    exec('git status', $output);
+
+    $out = '';
+    $unchanged = FALSE;
+    $ahead = FALSE;
+    $behind = FALSE;
+    foreach ($output as $sline) {
+      $comment = substr($sline, 0, 1) == '#';
+      if ($comment) {
+        if (preg_match('/Your branch is (ahead of|behind) \'([^\']+)\' by (\d+)/', $sline, $matches)) {
+          $out .= "\t$matches[1] {$matches[2]} by {$matches[3]} commit(s)\n";
+          if ($matches[1]=='behind') {
+            $behind = TRUE;
+          }
+          else {
+            $ahead = TRUE;
+          }
+        }
+      }
+      else {
+        if (preg_match('/nothing to commit/', $sline)) {
+          $unchanged = TRUE;
+        }
+      }
+    }
+
+    $total_changes += $unchanged ? 0 : 1;
+    $total_ahead += $ahead ? 1 : 0;
+    $total_behind += $behind ? 1 : 0;
+
+    if (!$unchanged || $ahead || $behind) {
+      print "$path:\n";
+      print $out . ($unchanged ? '' : "\tHas changes") . "\n\n";
+    }
+
+    chdir($root);
+  }
+}
+
+if ($total_changes > 0) {
+  print "{$total_changes} module(s) have uncommitted changes\n";
+}
+if ($total_ahead > 0) {
+  print "{$total_ahead} module(s) are ahead of their origin branch\n";
+}
+if ($total_behind > 0) {
+  print "{$total_behind} module(s) are behind their origin branch\n";
+}
