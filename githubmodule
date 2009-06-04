@@ -320,7 +320,7 @@ Project refences can be either the project number or the name ofthe project.
 You can also end the project name with a * wildcard to perform
 partial matching.
 
-Commands can be shortened \\e[0;31 arbitrarily \\e[m and will be matched to the first command
+Commands can be shortened arbitrarily and will be matched to the first command
 that matches. The command 'a' will map to 'add', not 'alias', as 'add' comes
 before 'alias' in the command list. Therefore the shortest possible form for
 'alias' is 'al'.
