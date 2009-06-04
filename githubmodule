@@ -138,6 +138,7 @@ class Interactive {
   public function loop() {
     do {
       $cmd = readline('?: ');
+      readline_add_history($cmd);
       $terms = explode(' ', $cmd);
 
       if (empty($terms[0])) {
