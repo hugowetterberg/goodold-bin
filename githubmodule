@@ -1,0 +1,390 @@
+#!/usr/bin/env php
+<?php
+$definition = array(
+  'project' => array(
+    'default' => array(),
+    'multiple' => TRUE,
+    'help' => 'The project or projects that you want to add',
+  ),
+  'as' => array(
+    'default' => array(),
+    'callback' => '_alias_project',
+    'help' => 'Adds a alias for a project',
+  ),
+  'in' => array(
+    'default' => 'sites/default/modules',
+    'help' => 'Where to place the submodules',
+  ),
+  'help' => array(
+    'default' => FALSE,
+    'alternates' => array('?', 'h'),
+    'help' => 'Use the help flag to get a usage description',
+  ),
+  'interactive' => array(
+    'default' => FALSE,
+    'alternates' => array('i'),
+    'help' => 'Use the interactive flag to start a interactive session.',
+  ),
+  'user' => array(
+    'default' => trim(shell_exec('git config --get github.user')),
+    'alternates' => array('u'),
+    'help' => 'The user that owns the project that you want to add',
+  ),
+  'private' => array(
+    'default' => FALSE,
+    'alternates' => array('priv', 'p'),
+    'help' => 'Use this flag to check out submodules using the private uri',
+  ),
+);
+
+if (!file_exists('.git')) {
+  print "All submodule operations must be executed in the repository root.\n";
+  die;
+}
+
+$params = parse_argv($argv, $definition, 'project');
+
+if ($params['help']) {
+  print "Insert help here!\n";
+  die;
+}
+
+if (empty($params['user'])) {
+  print "No github user was provided, configure git for use with github or specify a user with the parameter user=username\n";
+}
+
+$json = file_get_contents('http://github.com/api/v1/json/' . $params['user']);
+$result = json_decode($json);
+$i = new Interactive($result, $params);
+
+if ($params['interactive'] || empty($params['project'])) {
+  $i->list_projects();
+  print "Type 'help' to get a list of commands\n";
+  $i->loop();
+}
+
+foreach ($params['project'] as $project) {
+  $ref = $i->resolve_project_reference($project);
+  if (!$ref) {
+    print "Unknown project '{$project}'\n";
+    continue;
+  }
+  else {
+    $project = $ref[1];
+  }
+
+  if ($params['private']) {
+    $url = "git@github.com:{$params['user']}/{$project}.git";
+  }
+  else {
+    $url = "git://github.com/{$params['user']}/{$project}.git";
+  }
+  if (isset($params['alias'][$project])) {
+    $name = $params['alias'][$project];
+  }
+  else {
+    $name = $project;
+  }
+  $dir = trim($params['in'], ' /') . '/' . $name;
+  if (!file_exists($dir)) {
+    print "Adding the submodule {$url} in {$dir}\n";
+    print shell_exec("git submodule add {$url} {$dir}");
+  }
+  else {
+    print "Could not add {$name} as the directory {$dir} already exists.\n";
+  }
+}
+
+class Interactive {
+  private $repos;
+  private $params;
+  private $projects;
+  private $commands = array(
+    'add' => array(
+      'help' => "'add [project reference]' - to add a project.",
+    ),
+    'alias' => array(
+      'help' => "'alias [project reference] some_name' - to check out the project under a different name.",
+    ),
+    'in' => array(
+      'help' => "'in [new path]' - to change where the submodules are placed.",
+    ),
+    'remove' => array(
+      'help' => "'remove [project reference]' - to remove a project.",
+    ),
+    'list' => array(
+      'help' => "'list' - to list the available projects, 'list active' to show added projects.",
+    ),
+    'help' => array(
+      'help' => "'help' - to show this help text.",
+    ),
+    'quit' => array(
+      'help' => "'quit' - to cancel.",
+    ),
+    'show' => array(
+      'help' => "'show [project reference]' - to show more info about the project.",
+    ),
+    'done' => array(
+      'help' => "'done' - to finish and add the submodules.",
+    ),
+  );
+
+  public function __construct($data, &$params) {
+    $this->repos = $data->user->repositories;
+    $this->projects = &$params['project'];
+    $this->params = &$params;
+  }
+
+  public function loop() {
+    do {
+      $cmd = readline('?: ');
+      $terms = explode(' ', $cmd);
+
+      if (empty($terms[0])) {
+        continue;
+      }
+
+      if (!isset($this->commands[$terms[0]])) {
+        foreach ($this->commands as $cmd => $info) {
+          if (strpos($cmd, $terms[0]) === 0) {
+            $terms[0] = $cmd;
+          }
+        }
+      }
+
+      switch ($terms[0]) {
+        case 'add';
+          if (!isset($terms[1])) {
+            print "Missing project identifier\n";
+            continue;
+          }
+          $ref = $this->resolve_project_reference($terms[1]);
+          if ($ref) {
+            $name = $ref[1];
+            if (in_array($name, $this->projects)) {
+              print "{$name} has already been added\n";
+              continue;
+            }
+            $this->projects[] = $name;
+            print "{$name} has been added\n";
+          }
+          break;
+        case 'remove':
+          if (!isset($terms[1])) {
+            print "Missing project identifier\n";
+            continue;
+          }
+          $ref = $this->resolve_project_reference($terms[1], TRUE);
+          if ($ref) {
+            $name = $ref[1];
+            $idx = array_search($name, $this->projects);
+            if ($idx !== FALSE) {
+              unset($this->projects[$idx]);
+              print "Removed {$name}\n";
+            }
+            else {
+              print "{$name} was not active\n";
+            }
+          }
+          break;
+        case 'in':
+          if (!isset($terms[1])) {
+            print "Missing path\n";
+            continue;
+          }
+          $this->params['in'] = $terms[1];
+          print "Submodules will now be created in '{$terms[1]}'.\n";
+          break;
+        case 'alias':
+          if (!isset($terms[1])) {
+            print "Missing project identifier\n";
+            continue;
+          }
+          $ref = $this->resolve_project_reference($terms[1], TRUE);
+          if ($ref) {
+            $idx = array_search($name, $this->projects);
+            if ($idx !== FALSE) {
+              if (!empty($terms[2])) {
+                $this->params['alias'][$ref[1]] = $terms[2];
+                print "The alias for {$ref[1]} is now {$terms[2]}.\n";
+              }
+              else {
+                unset($this->params['alias'][$ref[1]]);
+                print "Removed the alias for {$ref[1]}.\n";
+              }
+            }
+            else {
+              print "{$ref[1]} was not active\n";
+            }
+          }
+          break;
+        case 'list':
+          if (isset($terms[1]) && $terms[1]=='active') {
+            foreach ($this->projects as $project) {
+              if (isset($this->params['alias'][$project])) {
+                print "{$project} as {$this->params['alias'][$project]}\n";
+              }
+              else {
+                print "{$project}\n";
+              }
+
+            }
+          }
+          else {
+            $this->list_projects();
+          }
+          break;
+        case 'show':
+          if (!isset($terms[1])) {
+            print "Missing project identifier\n";
+            continue;
+          }
+          $ref = $this->resolve_project_reference($terms[1]);
+          if ($ref) {
+            $repo = $this->repos[$ref[0]];
+            print "{$repo->name}\t{$repo->url}\n{$repo->description}\n";
+          }
+          break;
+        case 'help':
+          $this->help(isset($terms[1]) ? $terms[1] : NULL);
+          break;
+        case 'quit':
+        case 'exit':
+          print "Bye!\n";
+          exit();
+      }
+    } while ($terms[0] !== 'done');
+  }
+
+  public function list_projects() {
+    foreach ($this->repos as $idx => $repo) {
+      $idx++;
+      $a = in_array($repo->name, $this->projects) ? '*' : '';
+      $col = str_pad("{$idx}. {$a}{$repo->name}", 25, ' ');
+      if (mb_strlen($col)>25) {
+        $col = mb_substr($col, 0, 21) . '... ';
+      }
+      print $col;
+      if (!($idx%3)) {
+        print "\n";
+      }
+    }
+  }
+
+  public function resolve_project_reference($ref, $wc_active=FALSE) {
+    if (is_numeric($ref)) {
+      $ref = intval($ref);
+      if ($ref>0 && $ref<=count($this->repos)) {
+        return array($ref-1, $this->repos[$ref-1]->name);
+      }
+      else {
+        print "The project number seems to be out of bounds\n";
+        return FALSE;
+      }
+    }
+    else {
+      if (substr($ref, -1) == '*') {
+        $ref = substr($ref, 0, -1);
+        foreach ($this->repos as $idx => $repo) {
+          if (strpos($repo->name, $ref) === 0 && (!$wc_active || array_search($repo->name, $this->projects) !== FALSE)) {
+            return array($idx, $repo->name);
+          }
+        }
+        foreach ($this->repos as $idx => $repo) {
+          if (strpos($repo->name, $ref) === 0) {
+            return array($idx, $repo->name);
+          }
+        }
+      }
+      else foreach ($this->repos as $idx => $repo) {
+        if ($repo->name == $ref) {
+          return array($idx, $repo->name);
+        }
+      }
+      print "Could not find the project\n";
+      return FALSE;
+    }
+  }
+
+  private function help($name=NULL) {
+    foreach ($this->commands as $command => $info) {
+      if (!$name || $command == $name) {
+        print $info['help'] . "\n";
+      }
+    }
+    if (!$name) {
+      $text = <<<HELP
+
+Project refences can be either the project number or the name ofthe project. 
+You can also end the project name with a * wildcard to perform
+partial matching.
+
+Commands can be shortened \\e[0;31 arbitrarily \\e[m and will be matched to the first command
+that matches. The command 'a' will map to 'add', not 'alias', as 'add' comes
+before 'alias' in the command list. Therefore the shortest possible form for
+'alias' is 'al'.
+
+HELP;
+      print $text;
+    }
+  }
+}
+
+function parse_argv($argv, $def, $default) {
+  $argc = count($argv);
+  $params = array();
+  $expand = array();
+
+  foreach ($def as $name => $info) {
+    $params[$name] = $info['default'];
+    if (!empty($info['alternates'])) {
+      foreach ($info['alternates'] as $alt) {
+        $expand[$alt] = $name;
+      }
+    }
+  }
+
+  for ($i=1; $i<$argc; $i++) {
+    if (strpos($argv[$i], '=')!==FALSE) {
+      list($name, $value) = explode('=', $argv[$i]);
+      if (isset($expand[$name])) {
+        $name = $expand[$name];
+      }
+      if (isset($def[$name])) {
+        _parse_argv_use_value($params, $def[$name], $name, $value);
+      }
+    }
+    else if (substr($argv[$i], 0, 1)=='-') {
+      $name = substr($argv[$i], 1);
+      if (isset($expand[$name])) {
+        $name = $expand[$name];
+      }
+      $params[$name] = TRUE;
+    }
+    else {
+      _parse_argv_use_value($params, $def[$default], $default, $argv[$i]);
+    }
+  }
+
+  return $params;
+}
+
+function _parse_argv_use_value(&$params, $def, $name, $value) {
+  if (isset($def['callback'])) {
+    $args = array(&$params, $def, $name, $value);
+    call_user_func_array($def['callback'], $args);
+  }
+  else if (isset($def['multiple']) && $def['multiple']) {
+    $params[$name][] = $value;
+  }
+  else {
+    $params[$name] = $value;
+  }
+}
+
+function _alias_project(&$params, $def, $name, $value) {
+  if (!empty($params['project'])) {
+    $project = $params['project'][count($params['project'])-1];
+    $params['alias'][$project] = $value;
+  }
+}
