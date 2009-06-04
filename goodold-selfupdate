@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+cd $0/..
+git pull origin
