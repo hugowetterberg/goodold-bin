@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+if [ ${1:-X} == ${1:-Y} ]; then
+  source sync.config
+fi
+
+WD=`pwd`
+CONFIG=${1:-sync.config}
+source $CONFIG
+
+if [ ! -d $ARCHIVE_DIR ]; then
+  mkdir $ARCHIVE_DIR
+  cd $ARCHIVE_DIR
+  git init
+  cd $WD
+fi
+
+cd $ARCHIVE_DIR
+REMOTE=`git branch -lr`
+if [[ $REMOTE =~ $REMOTE_NAME/master ]]; then
+  echo "Remote is known to work"
+else
+  # Try to set up the remote repo if we have a remote working directory
+  if [ ${REMOTE_WD:-X} == ${REMOTE_WD:-Y} ]; then
+    echo "Checking remote git repository"
+    git remote add $REMOTE_NAME ssh://$REMOTE_SSH_USER@$REMOTE_SSH_HOST$REMOTE_WD
+    REMOTE=`git branch -lr`
+    cd $WD
+    cat $CONFIG $0-bin/setup-remote.sh | ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST
+  fi
+fi
+cd $WD
+echo "Dumping local database"
+mysqldump --opt -v -h $LOCAL_HOST -u $LOCAL_USER -p"$LOCAL_PASS" $LOCAL_DB > $ARCHIVE_DIR/dbdump.sql
+cd $ARCHIVE_DIR
+git add dbdump.sql
+git commit -m "Dump `date +%Y%m%d_%H.%M.%S`"
+
+if [[ $REMOTE =~ $REMOTE_NAME/master ]]; then
+  echo "Pushing database updates"
+  git push $REMOTE_NAME master
+else
+  echo "The remote haven't been properly set up, won't push"
+fi
+
+cd $WD
+# Update the remote database
+if [ ${REMOTE_WD:-X} == ${REMOTE_WD:-Y} ]; then
+  cat $CONFIG $0-bin/remote.sh | ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST
+fi
