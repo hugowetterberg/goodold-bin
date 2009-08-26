@@ -1,0 +1,15 @@
+function rwnd {
+  TO=${1-public_html}
+  DIR=`pwd`
+  ORIGIN=$DIR
+  BASE=`basename $DIR`
+  while [ "$BASE" != "$TO" ] && [ "$BASE" != "/" ]; do
+    cd ..
+    DIR=`pwd`
+    BASE=`basename $DIR`
+  done
+  
+  if [ $BASE == '/' ]; then
+    cd "$ORIGIN"
+  fi
+}
