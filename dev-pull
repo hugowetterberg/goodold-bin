@@ -10,12 +10,14 @@ defined()
 # File to dump to
 DUMP_NAME=dump.`date +%Y%m%d_%H.%M.%S`.sql
 PRINT="echo "
-STICKY_PRINT="growlnotify -s -aTextMate -m"
+STICKY_PRINT="echo "
 
 ARCHIVE_DIR=database_archive
 if [ ! -d $ARCHIVE_DIR ]; then
   mkdir $ARCHIVE_DIR
 fi
+
+GIT_ARCHIVE_DIR=git_database_archive
 
 SYNC_DB="${1-n}"
 SYNC_FILES="${2-n}"
@@ -23,17 +25,17 @@ SYNC_FILES="${2-n}"
 if [ "$SYNC_DB" == "y" ]; then
   # Get remote data
   $PRINT "Dumping data from remote db to $DUMP_NAME"
-  mysqldump5 --opt -v -h $REMOTE_HOST -P $REMOTE_PORT -u $REMOTE_USER -p"$REMOTE_PASS" $REMOTE_DB > $DUMP_NAME
+  mysqldump --opt -v -h $REMOTE_HOST -P $REMOTE_PORT -u $REMOTE_USER -p"$REMOTE_PASS" $REMOTE_DB > $DUMP_NAME
   
   # Update local testing server
   $PRINT "Emptying local database"
-  mysqldump5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  mysqldump -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
   
   $PRINT "Updating local testing server"
   if [ `defined SED_REPLACEMENTS` ]; then
-    sed -f $SED_REPLACEMENTS $DUMP_NAME | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+    sed -f $SED_REPLACEMENTS $DUMP_NAME | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
   else
-    mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB < $DUMP_NAME
+    mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB < $DUMP_NAME
   fi
   
   # Archiving backup
@@ -43,19 +45,46 @@ if [ "$SYNC_DB" == "y" ]; then
   ln -f $ARCHIVE_DIR/$DUMP_NAME.gz $ARCHIVE_DIR/last_dump.sql.gz
 fi
 
+if [ "$SYNC_DB" == "git-setup" ]; then
+  $PRINT "Setting upp remote"
+  cat ./sync.config $0-bin/setup-remote.sh | ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST
+fi
+
+if [ "$SYNC_DB" == "git" ]; then
+  if [ ! -d $GIT_ARCHIVE_DIR ]; then
+    git clone ssh://$REMOTE_SSH_USER@$REMOTE_SSH_HOST/$REMOTE_GIT_DIR $GIT_ARCHIVE_DIR
+  fi
+  $PRINT "Getting updated database"
+  cat ./sync.config $0-bin/update-remote.sh | ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST
+  cd $GIT_ARCHIVE_DIR
+  git fetch origin
+  git merge origin/master
+  
+  # Update local testing server
+  $PRINT "Emptying local database"
+  mysqldump -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  
+  $PRINT "Updating local testing server"
+  if [ `defined SED_REPLACEMENTS` ]; then
+    cat dump.sql | sed -f $SED_REPLACEMENTS | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  else
+    cat dump.sql | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  fi
+fi
+
 if [ "$SYNC_DB" == "r" ]; then
   if [ -f $ARCHIVE_DIR/last_dump.sql.gz ]; then
     $PRINT "Refreshing local database from last dump"
     
     # Update local testing server
     $PRINT "Emptying local database"
-    mysqldump5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+    mysqldump -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
   
     $PRINT "Updating local testing server"
     if [ `defined SED_REPLACEMENTS` ]; then
-      gunzip -c $ARCHIVE_DIR/last_dump.sql.gz | sed -f $SED_REPLACEMENTS | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+      gunzip -c $ARCHIVE_DIR/last_dump.sql.gz | sed -f $SED_REPLACEMENTS | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
     else
-      gunzip -c $ARCHIVE_DIR/last_dump.sql.gz | mysql5 -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+      gunzip -c $ARCHIVE_DIR/last_dump.sql.gz | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
     fi
   else
     $PRINT "No previous dump found"
