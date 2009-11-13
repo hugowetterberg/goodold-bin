@@ -3,7 +3,7 @@
 /**
  * Saves mails sent from PHP as textfiles. Perfect for testing email.
  * Add the following to your php.ini:
- * sendmail_path = ~/bin/goodold-bin/sendmail
+ * sendmail_path = php-sendmail
  * 
  * Heavily inspired by http://drupal4hu.com/node/55
  */
