@@ -1,0 +1,18 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Saves mails sent from php as textfiles. Perfect for testing email.
+ * Add the following to your php.ini
+ * sendmail_path = /Users/anders/bin/goodold-bin/sendmail
+ */
+
+$dir = "/tmp/phpmails";
+if (!is_dir($dir)) {
+  mkdir($dir);
+}
+
+$input = file_get_contents('php://stdin');
+preg_match('|^To: (.*)|', $input, $matches);
+$filename = isset($matches[1]) ? $matches[1] : 'no-recepient_';
+$t = $dir . '/' . date('ymd\TH:i:s') .''. $filename .'.txt';
+file_put_contents($t, $input);
