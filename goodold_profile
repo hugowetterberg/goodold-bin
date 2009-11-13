@@ -1,0 +1,41 @@
+# Common configureation file for Good Old
+
+# Source in the rewind function
+. ~/bin/goodold-bin/functions/rwnd
+
+# Add apache bin to path
+if [ -d /opt/local/apache2/bin ]; then
+  PATH=/opt/local/apache2/bin:$PATH
+fi
+
+# Add mysql bin to path
+if [ -d /opt/local/lib/mysql5/bin ]; then
+  PATH=/opt/local/lib/mysql5/bin:$PATH
+fi
+
+# Add your local bin directory to the path
+if [ -d ~/bin ]; then
+  PATH=~/bin:$PATH
+  # Add all subfolders of you bin dir to your path
+  for dir in ~/bin/*; do
+    if [ -d $dir ]; then
+      PATH=$dir:$PATH
+    fi
+  done
+fi
+export PATH
+
+# Add bash completion support if it exists
+if [ -f /opt/local/etc/bash_completion ]; then
+  . /opt/local/etc/bash_completion
+fi
+
+# Add some aliases
+alias gitx='gitx --all'
+alias r='rwnd'
+
+# Alias an set TextMate as EDITOR if it's installed
+if which -s mate; then
+  export EDITOR="mate -w"
+  alias m="mate"
+fi
