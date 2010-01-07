@@ -72,6 +72,26 @@ if [ "$SYNC_DB" == "git" ]; then
   fi
 fi
 
+if [ "$SYNC_DB" == "gitr" ]; then
+  if [ ! -d $GIT_ARCHIVE_DIR ]; then
+    git clone ssh://$REMOTE_SSH_USER@$REMOTE_SSH_HOST/$REMOTE_GIT_DIR $GIT_ARCHIVE_DIR
+  fi
+  cd $GIT_ARCHIVE_DIR
+  git fetch origin
+  git merge origin/master
+  
+  # Update local testing server
+  $PRINT "Emptying local database"
+  mysqldump -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS --add-drop-table --force --no-data $LOCAL_DB | grep ^DROP | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  
+  $PRINT "Updating local testing server"
+  if [ `defined SED_REPLACEMENTS` ]; then
+    cat dump.sql | sed -f $SED_REPLACEMENTS | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  else
+    cat dump.sql | mysql -h $LOCAL_HOST -u $LOCAL_USER -p$LOCAL_PASS $LOCAL_DB
+  fi
+fi
+
 if [ "$SYNC_DB" == "r" ]; then
   if [ -f $ARCHIVE_DIR/last_dump.sql.gz ]; then
     $PRINT "Refreshing local database from last dump"
@@ -92,7 +112,7 @@ if [ "$SYNC_DB" == "r" ]; then
 fi
 
 if [ "$SYNC_FILES" == "y" ]; then
-  $PRINT "Rsyncing files"
+  $PRINT "Rsyncing files, you will be asked about your local account password"
   sudo rsync -ave ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST:$REMOTE_FILES $LOCAL_FILES
   $PRINT "Changing ownership of rsynced files"
   sudo chown -R $HTTPD_USER:$HTTPD_USER $LOCAL_FILES
