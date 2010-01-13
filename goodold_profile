@@ -1,7 +1,12 @@
 # Common configureation file for Good Old
 
-# Source in the rewind function
-. ~/bin/goodold-bin/functions/rwnd
+# Source in functions
+for f in ~/bin/goodold-bin/functions/*; do
+  if [ -f $f ]; then
+    . $f
+  fi
+done
+
 
 # Add apache bin to path
 if [ -d /opt/local/apache2/bin ]; then
