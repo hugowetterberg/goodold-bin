@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# Some defaults
+PROJECT_DIR=~/Projects
+
+# Read config file
+. ~/.nproject
+if [ -f .nproject ]; then
+  . .nproject
+fi
+
+cd $PROJECT_DIR
+if [ ! -d "goodold_drupal" ]; then
+  echo "Cloning Good Old Drupal"
+  git clone git://github.com/goodold/goodold_drupal.git
+else
+  echo "Updating Good Old Drupal"
+  cd goodold_drupal
+  git pull origin
+  cd ~/Projects
+fi
+
+if [ -e "$1" ]; then
+  echo "Enter the domain name of the site"
+  read DOMAIN
+else
+  DOMAIN="$1"
+fi
+DB=`echo "$DOMAIN" | sed 's/\./\_/g'`
+
+if [ ! -d $DOMAIN ]; then
+  echo "Creating the database $DB"
+  mysqladmin -u$DB_SUPERUSER -p$DB_PASSWORD create $DB
+
+  echo "Cloning Good Old Drupal"
+  mkdir $DOMAIN
+  cd $DOMAIN
+  git clone $PROJECT_DIR/goodold_drupal public_html
+  cd public_html
+
+  # Add a proper remote
+  git remote rename origin local
+  git remote add origin git://github.com/goodold/goodold_drupal.git
+  
+  echo "Pulling in submodules"
+  git submodule update --init
+  
+  echo "Setting up sites/default"
+  cd sites/default
+  mkdir modules themes files
+  cp default.settings.php settings.php
+  chmod a+w files settings.php
+  
+  open "http://$DOMAIN"
+else
+  echo "Looks like $DOMAIN already exists"
+fi

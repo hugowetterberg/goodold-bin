@@ -1,0 +1,4 @@
+# Should be named .nproject and placed in home dir or Project dir
+PROJECT_DIR=~/Projects
+DB_SUPERUSER=root
+DB_PASSWORD=pass
