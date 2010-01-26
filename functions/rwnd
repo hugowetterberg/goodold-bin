@@ -13,3 +13,12 @@ function rwnd {
     cd "$ORIGIN"
   fi
 }
+
+function _complete_rwnd {
+directories=`pwd |cut -c 2- |sed 's/\//\n/g'`
+cur="${COMP_WORDS[COMP_CWORD]}"
+COMPREPLY=( $(compgen -W "${directories}" -- ${cur}) )
+}
+
+complete -F _complete_rwnd r
+complete -F _complete_rwnd rwnd
