@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-scp ~/.ssh/goodold_rsa.pub $1:~/goodold_rsa.pub
-echo "mkdir .ssh; mv goodold_rsa.pub .ssh/; cat .ssh/goodold_rsa.pub >> .ssh/authorized_keys;" | ssh $1

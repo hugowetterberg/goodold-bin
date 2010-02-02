@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+HOST="${1:-nodef}"
+
+if [[ "$HOST" == "nodef" ]]; then
+  echo ""
+  echo "Missing host/user information."
+  echo "Usage: $ key-access user@example.com [key]"
+  echo "Where key is the path to the public key"
+  echo ""
+else
+  KEY=${2:-~/.ssh/goodold_rsa.pub}
+  if [ -f $KEY ]; then
+    KEYNAME=`basename "${KEY}"`
+    echo "Key $KEY"
+    echo "Basename $KEYNAME"
+    scp "$KEY" $HOST:~/$KEYNAME
+    echo "mkdir .ssh; mv ${KEYNAME} .ssh/; cat .ssh/${KEYNAME} >> .ssh/authorized_keys;" | ssh $HOST
+  else
+    echo "$KEY: No such file or directory"
+  fi
+fi
