@@ -1,0 +1,4 @@
+#!/usr/bin/sed -f
+/INSERT INTO \`dinby_cache/d
+/INSERT INTO \`dinby_search_/d
+/INSERT INTO \`dinby_sessions/d
