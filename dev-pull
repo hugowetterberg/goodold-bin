@@ -11,6 +11,7 @@ defined()
 DUMP_NAME=dump.`date +%Y%m%d_%H.%M.%S`.sql
 PRINT="echo "
 STICKY_PRINT="echo "
+USER=`whoami`
 
 ARCHIVE_DIR=database_archive
 if [ ! -d $ARCHIVE_DIR ]; then
@@ -113,7 +114,8 @@ fi
 
 if [ "$SYNC_FILES" == "y" ]; then
   $PRINT "Rsyncing files, you will be asked about your local account password"
-  sudo rsync -ave ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST:$REMOTE_FILES $LOCAL_FILES
+  sudo chown -R $USER $LOCAL_FILES
+  rsync -ave ssh $REMOTE_SSH_USER@$REMOTE_SSH_HOST:$REMOTE_FILES $LOCAL_FILES
   $PRINT "Changing ownership of rsynced files"
   sudo chown -R $HTTPD_USER:$HTTPD_USER $LOCAL_FILES
 fi
