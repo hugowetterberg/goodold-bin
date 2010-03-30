@@ -39,6 +39,7 @@ fi
 alias gitx='gitx --all'
 alias r='rwnd'
 alias o='open'
+alias l='line'
 
 # Alias an set TextMate as EDITOR if it's installed
 if which -s mate; then
