@@ -5,7 +5,12 @@ defined()
 }
 
 # Read configuration
-. ./sync.config
+CONFIG="./sync.config"
+if [ ! -e $CONFIG ]; then
+  echo 'No config found.'
+  exit
+fi
+. $CONFIG
 
 # File to dump to
 DUMP_NAME=dump.`date +%Y%m%d_%H.%M.%S`.sql
