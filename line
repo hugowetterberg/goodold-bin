@@ -1,0 +1,32 @@
+#!/usr/bin/env python
+from optparse import OptionParser
+import subprocess
+from sys import stdin
+
+parser = OptionParser()
+parser.add_option("-c", "--context", dest="context", default=0,
+                  help="Number of surrounding lines to return")
+
+(options, args) = parser.parse_args()
+
+context = int(options.context);
+start = int(args[0]) + context;
+if context > 0:
+    tail = context * 2 + 1;
+else:
+    tail = 1
+
+if len(args) > 1:
+    proc = subprocess.Popen(["head", "-%d" % start, args[1]],
+        stdout=subprocess.PIPE)
+    head_output = proc.communicate()
+else:
+    proc = subprocess.Popen(["head", "-%d" % start],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    head_output = proc.communicate(stdin.read())
+
+proc = subprocess.Popen(["tail", "-%d" % tail],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+output = proc.communicate(head_output[0])
+
+print output[0],
