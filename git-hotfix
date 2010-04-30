@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+git checkout $1
+git cherry-pick $2
+git checkout master
