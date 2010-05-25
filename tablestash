@@ -1,0 +1,62 @@
+#!/usr/bin/env python
+from optparse import OptionParser
+import subprocess
+import re
+import os
+import sys
+
+parser = OptionParser()
+(options, args) = parser.parse_args()
+
+if not os.path.exists('sync.config'):
+    print 'No sync.config available'
+    sys.exit()
+    
+if not len(args) or (args[0] != 'stash' and args[0] != 'apply'):
+    if not len(args):
+        print 'No arguments provided'
+    else:
+        print 'Unknown command "%s" recieved' % args[0]
+    print 'To stash tables:'
+    print ' $ tablestash stash tableA [tableB] [table...]'
+    print 'To restore previously stashed tables:'
+    print ' $ tablestash apply'
+    print 'To restore a subset of previously stashed tables:'
+    print ' $ tablestash apply tableA [table...]'
+    sys.exit()
+
+# Read sync config
+config = {}
+conf = open('sync.config', 'r');
+for line in conf:
+    m = re.search('^([A-Z_]+)="(.*)"$', line);
+    if m:
+        config[m.group(1)] = m.group(2)
+
+if not os.path.exists('.tablestash'):
+    os.mkdir('.tablestash');
+
+if args[0] == 'stash':
+    tlist = open('.tablestash/table_list.txt', 'w');
+    for table in args[1:]:
+        print "Dumping", table
+        proc = subprocess.Popen(["mysqldump", "-u%s" % config['LOCAL_USER'], '-p%s' % config['LOCAL_PASS'], config['LOCAL_DB'], table],
+            stdout=subprocess.PIPE)
+        out = proc.communicate()
+        stash = open('.tablestash/%s.sql' % table, 'w')
+        stash.write(out[0])
+        tlist.write(table + "\n")
+
+if args[0] == 'apply':
+    if len(args) > 1:
+        tables = args[1:]
+    elif os.path.exists('.tablestash/table_list.txt'):
+        tables = open('.tablestash/table_list.txt', 'r')
+
+    for table in tables:
+        table = table.strip()
+        print "Restoring ", table
+        stash = open('.tablestash/%s.sql' % table, 'r')
+        proc = subprocess.Popen(["mysql", "-u%s" % config['LOCAL_USER'], '-p%s' % config['LOCAL_PASS'], config['LOCAL_DB']],
+            stdin=subprocess.PIPE)
+        proc.communicate(stash.read())
